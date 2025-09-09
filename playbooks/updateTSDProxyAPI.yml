@@ -1,0 +1,29 @@
+---
+- name: Update API Key for TSDProxy
+  hosts: TSDProxy
+  become: yes # If elevated privileges are needed to modify key files
+
+  vars_files:
+    - vars/secrets.yml # Include the vault-encrypted file
+
+  tasks:
+    - name: Ensure API key directory exists (if applicable)
+      ansible.builtin.file:
+        path: docker/TSDProxy/
+        state: directory
+        # mode: '0755' #not sure if needed
+
+    - name: Update API key in .env file
+      ansible.builtin.lineinfile:
+        path: docker/TSDProxy/.env 
+        regexp: '^api_key='
+        line: "api_key={{ api_key }}"
+        state: present
+        backup: yes # Create a backup of the original file
+      notify: Restart Application Service # If the application needs a restart
+
+  handlers:     #This will most likely need to be changed as I'm not sure if this can "DCFR" the compose file.
+    - name: Restart Application Service
+      ansible.builtin.service:
+        name: your_app_service_name
+        state: restarted
