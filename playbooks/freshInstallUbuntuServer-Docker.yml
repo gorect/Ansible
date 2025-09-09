@@ -1,0 +1,12 @@
+---
+- name: Provision Fresh Ubuntu Server Install: Docker Compose Environment
+  hosts: Docker
+  tasks:
+    - name: Install required packages
+      apt:
+        name: "{{ item }}"
+        state: present
+      
+    - name: Set Docker User to Run Without Sudo
+      #sudo usermod -aG docker $USER
+      #sudo systemctl enable --now docker
