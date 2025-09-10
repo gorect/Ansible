@@ -1,0 +1,26 @@
+---
+# packages to install
+packages_to_install:
+    - git-core
+    - ufw
+    - dnsutils
+    - build-essential
+    - bash-completion
+    - ntp
+    - htop
+    - vim
+    - wget
+    - curl
+    - gzip
+    - mlocate
+    - bc
+    - hddtemp
+    - lm-sensors
+    - qemu-guest-agent
+    - atop
+    - parted
+    - glances
+    - gnupg
+    - net-tools
+    - cifs-utils 
+    - gedit
