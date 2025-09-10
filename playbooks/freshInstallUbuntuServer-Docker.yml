@@ -1,12 +1,59 @@
 ---
 - name: Provision Fresh Ubuntu Server Install: Docker Compose Environment
   hosts: Docker
+  become: true
+  vars_files:
+    - ../vars/apt.yml
+    - ../vars/docker.yml
   tasks:
-    - name: Install required packages
-      apt:
-        name: "{{ item }}"
+    - name: Install "Fresh Server Install" Packages
+      ansible.builtin.apt:
+        name: "{{ system_packages }
         state: present
+        update_cache: true
       
-    - name: Set Docker User to Run Without Sudo
-      #sudo usermod -aG docker $USER
-      #sudo systemctl enable --now docker
+    - name: 1. Update apt package index and install dependencies
+      ansible.builtin.apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: true
+
+    - name: 2. Add Docker's official GPG key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        keyring: /usr/share/keyrings/docker-archive-keyring.gpg
+        state: present
+
+    - name: 3. Add Docker's stable repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: 4. Install latest Docker Engine and Docker Compose
+      ansible.builtin.apt:
+        name:
+          - docker-ce           # Docker Community Edition
+          - docker-ce-cli       # Docker Command Line Interface
+          - containerd.io
+          - docker-compose-plugin # The new `docker compose` command
+        state: latest            # Ensures the latest versions are installed/upgraded
+        update_cache: true
+
+    - name: 5. Ensure Docker service is running and enabled on boot
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: 6. Add the current user to the 'docker' group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}" # This fact gets the user you're connecting as
+        groups: docker
+        append: yes # This is important to ADD the group, not replace existing ones
+      register: user_mod_result
+
+    - name: Display a message about logging out
+      ansible.builtin.debug:
+        msg: "IMPORTANT: You must log out and log back in for the group changes to take effect!"
+      when: user_mod_result.changed
