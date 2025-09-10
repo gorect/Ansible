@@ -1,6 +1,6 @@
 ---
 # packages to install
-packages_to_install:
+system_packages:
     - git-core
     - ufw
     - dnsutils
