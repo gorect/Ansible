@@ -24,3 +24,4 @@ system_packages:
     - net-tools
     - cifs-utils 
     - gedit
+    - unattended-upgrades
