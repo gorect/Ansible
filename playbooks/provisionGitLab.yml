@@ -1,0 +1,109 @@
+---
+- name: Provision GitLab Server with Docker Compose
+  hosts: gitlab # <--- IMPORTANT: Replace with your VM's IP or hostname from your inventory
+  become: yes # Run tasks with sudo/root privileges
+
+  vars:
+    gitlab_base_dir: "/srv/gitlab"
+    gitlab_config_dir: "{{ gitlab_base_dir }}/config"
+    gitlab_logs_dir: "{{ gitlab_base_dir }}/logs"
+    gitlab_data_dir: "{{ gitlab_base_dir }}/data"
+
+  tasks:
+    - name: Update apt cache and install necessary packages (apt-transport-https)
+      ansible.builtin.apt:
+        name: apt-transport-https
+        state: present
+        update_cache: yes
+
+    - name: Add Docker GPG key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker APT repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker Engine, containerd, and Docker Compose Plugin (for 'docker compose' command)
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin # This provides the 'docker compose' (v2) command
+        state: present
+        update_cache: yes
+
+    - name: Ensure 'docker' group exists
+      ansible.builtin.group:
+        name: docker
+        state: present
+
+    - name: Add current user to 'docker' group (for non-sudo docker commands)
+      # Note: For this change to take effect for the *current* Ansible user
+      # during the same playbook run, you might need a handler to log out/in,
+      # or simply run subsequent docker commands with `become: yes`.
+      # We will run docker-compose with `become: yes`, so it's fine.
+      ansible.builtin.user:
+        name: "{{ ansible_user }}" # The user Ansible connects as
+        groups: docker
+        append: yes
+
+    - name: Create GitLab volume directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755' # Standard permissions, GitLab container might adjust them internally
+        owner: root
+        group: root
+      loop:
+        - "{{ gitlab_config_dir }}"
+        - "{{ gitlab_logs_dir }}"
+        - "{{ gitlab_data_dir }}"
+
+    - name: Copy docker-compose.yml to the remote server
+      ansible.builtin.copy:
+        src: docker-compose.yml
+        dest: "{{ gitlab_base_dir }}/docker-compose.yml"
+        mode: '0644'
+
+    - name: Copy .env file to the remote server
+      ansible.builtin.copy:
+        src: .env
+        dest: "{{ gitlab_base_dir }}/.env"
+        mode: '0600' # Make sure this file is only readable by the owner
+
+    - name: Pull GitLab Docker image (optional, `docker compose up` does this automatically)
+      community.docker.docker_image:
+        name: gitlab/gitlab-ce:latest
+        pull: yes
+      # Not strictly necessary as `docker compose up` will pull if not present,
+      # but explicitly pulling can sometimes make the `up` step faster.
+
+    - name: Bring up GitLab containers with Docker Compose
+      community.docker.docker_compose:
+        project_src: "{{ gitlab_base_dir }}"
+        state: present # Ensures the services are running
+        restarted: yes # Ensures services are restarted if changes are detected
+        build: no # We are pulling an image, not building one
+      register: gitlab_compose_output
+
+    - name: Display docker compose output
+      ansible.builtin.debug:
+        var: gitlab_compose_output
+
+    - name: "Important: Configure GitLab external_url after first startup"
+      ansible.builtin.debug:
+        msg: |
+          GitLab container is now running.
+          You still need to configure the 'external_url' inside the container.
+          1. SSH into your VM.
+          2. Run: sudo docker exec -it gitlab bash
+          3. Edit /etc/gitlab/gitlab.rb and set `external_url 'http://{{ GITLAB_HOSTNAME }}/'` (or https)
+          4. Run: gitlab-ctl reconfigure
+          5. GitLab will then be accessible at your configured URL.
+          Remember to adjust firewall settings if necessary (e.g., allow 80, 443, 22).
